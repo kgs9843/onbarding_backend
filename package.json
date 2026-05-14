@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test:db": "node scripts/check-db.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1046.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

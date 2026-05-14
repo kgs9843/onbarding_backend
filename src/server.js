@@ -20,76 +20,76 @@ const CORS_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .filter(Boolean);
 const API_BASE_PATH = (process.env.API_BASE_PATH || '/api').replace(/\/$/, '');
 
-const pool = createPool();
-const store = createTodoStore(pool);
-const app = express();
-
-app.use(
-  cors({
-    origin: CORS_ORIGINS.length === 1 ? CORS_ORIGINS[0] : CORS_ORIGINS,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  }),
-);
-app.use(express.json());
-
-app.get('/health', (_req, res) => {
-  res.status(200).send('OK');
-});
-
-app.get(`${API_BASE_PATH}/todos`, async (_req, res) => {
-  try {
-    const todos = await store.list();
-    res.json(todos);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '할 일 목록을 불러오지 못했습니다.' });
-  }
-});
-
-app.post(`${API_BASE_PATH}/todos`, async (req, res) => {
-  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
-  if (!text) {
-    res.status(400).json({ error: 'text는 필수이며 비어 있을 수 없습니다.' });
-    return;
-  }
-  try {
-    const todo = await store.create(text);
-    res.status(201).json(todo);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '할 일을 추가하지 못했습니다.' });
-  }
-});
-
-app.patch(`${API_BASE_PATH}/todos/:id/complete`, async (req, res) => {
-  try {
-    const updated = await store.complete(req.params.id);
-    if (!updated) {
-      res.status(404).json({ error: '해당 할 일을 찾을 수 없습니다.' });
-      return;
-    }
-    res.json(updated);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '완료 처리에 실패했습니다.' });
-  }
-});
-
-app.delete(`${API_BASE_PATH}/todos/:id`, async (req, res) => {
-  try {
-    const removed = await store.remove(req.params.id);
-    if (!removed) {
-      res.status(404).json({ error: '해당 할 일을 찾을 수 없습니다.' });
-      return;
-    }
-    res.status(204).send();
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '삭제에 실패했습니다.' });
-  }
-});
-
 async function main() {
+  const pool = await createPool();
+  const store = createTodoStore(pool);
+  const app = express();
+
+  app.use(
+    cors({
+      origin: CORS_ORIGINS.length === 1 ? CORS_ORIGINS[0] : CORS_ORIGINS,
+      methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    }),
+  );
+  app.use(express.json());
+
+  app.get('/health', (_req, res) => {
+    res.status(200).send('OK');
+  });
+
+  app.get(`${API_BASE_PATH}/todos`, async (_req, res) => {
+    try {
+      const todos = await store.list();
+      res.json(todos);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: '할 일 목록을 불러오지 못했습니다.' });
+    }
+  });
+
+  app.post(`${API_BASE_PATH}/todos`, async (req, res) => {
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!text) {
+      res.status(400).json({ error: 'text는 필수이며 비어 있을 수 없습니다.' });
+      return;
+    }
+    try {
+      const todo = await store.create(text);
+      res.status(201).json(todo);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: '할 일을 추가하지 못했습니다.' });
+    }
+  });
+
+  app.patch(`${API_BASE_PATH}/todos/:id/complete`, async (req, res) => {
+    try {
+      const updated = await store.complete(req.params.id);
+      if (!updated) {
+        res.status(404).json({ error: '해당 할 일을 찾을 수 없습니다.' });
+        return;
+      }
+      res.json(updated);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: '완료 처리에 실패했습니다.' });
+    }
+  });
+
+  app.delete(`${API_BASE_PATH}/todos/:id`, async (req, res) => {
+    try {
+      const removed = await store.remove(req.params.id);
+      if (!removed) {
+        res.status(404).json({ error: '해당 할 일을 찾을 수 없습니다.' });
+        return;
+      }
+      res.status(204).send();
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: '삭제에 실패했습니다.' });
+    }
+  });
+
   await ensureTodosTable(pool);
   app.listen(PORT, () => {
     console.log(`Todo API listening on http://localhost:${PORT}${API_BASE_PATH}`);
