@@ -7,7 +7,42 @@ function sslOption() {
 }
 
 /**
- * RDS가 Secrets Manager에 저장한 JSON (host, username, password, port, dbname 등)
+ * RDS / Secrets Manager에 흔한 JSON 키 변형을 허용합니다.
+ * @param {Record<string, unknown>} s
+ */
+function parseSecretForPostgres(s) {
+  const host =
+    pickStr(s, ['host', 'hostname', 'address', 'endpoint', 'HOST']) ||
+    (typeof s.endpoint === 'string' ? s.endpoint.replace(/:\d+$/, '') : '') ||
+    process.env.PGHOST?.trim();
+  const user = pickStr(s, ['username', 'user', 'USER', 'USERNAME']);
+  const password = pickStr(s, ['password', 'PASSWORD', 'token']);
+  const database =
+    pickStr(s, ['dbname', 'database', 'dbName', 'name', 'DBNAME']) ||
+    process.env.PGDATABASE?.trim() ||
+    'postgres';
+  const port = pickPort(s);
+
+  return { host, user, password, database, port, rawKeys: Object.keys(s) };
+}
+
+function pickStr(obj, keys) {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.length > 0) return v;
+  }
+  return '';
+}
+
+function pickPort(obj) {
+  const p = obj.port ?? obj.PORT;
+  if (typeof p === 'number' && Number.isFinite(p)) return p;
+  if (typeof p === 'string' && p.length > 0) return Number(p) || 5432;
+  return 5432;
+}
+
+/**
+ * RDS가 Secrets Manager에 저장한 JSON
  * @returns {Promise<object>} pg.Pool 생성 옵션 (connectionString 제외, 개별 필드)
  */
 async function loadPoolConfigFromSecretsManager(ssl) {
@@ -17,21 +52,35 @@ async function loadPoolConfigFromSecretsManager(ssl) {
   const region =
     process.env.AWS_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim() || 'ap-northeast-2';
   const client = new SecretsManagerClient({ region });
-  const out = await client.send(new GetSecretValueCommand({ SecretId: arn }));
+  const out = await client.send(
+    new GetSecretValueCommand({
+      SecretId: arn,
+      VersionStage: 'AWSCURRENT',
+    }),
+  );
   if (!out.SecretString) {
     throw new Error('Secrets Manager 응답에 SecretString이 없습니다.');
   }
-  const s = JSON.parse(out.SecretString);
-  const host = s.host;
-  const user = s.username;
-  const password = s.password;
-  const database = s.dbname ?? s.database ?? s.dbName;
-  const port = Number(s.port ?? 5432);
-  if (!host || !user || !password || !database) {
+
+  let s;
+  try {
+    s = JSON.parse(out.SecretString);
+  } catch {
     throw new Error(
-      '시크릿 JSON에 host, username, password, dbname(또는 database)이 있어야 합니다. RDS가 만든 시크릿 형식을 확인하세요.',
+      '시크릿이 JSON이 아닙니다. RDS가 자동 생성한 시크릿인지, Secrets Manager 콘솔에서 "시크릿 값" 형식을 확인하세요.',
     );
   }
+
+  const parsed = parseSecretForPostgres(s);
+  const { host, user, password, database, port, rawKeys } = parsed;
+
+  if (!host || !user || !password) {
+    throw new Error(
+      `시크릿에서 host·username·password를 찾지 못했습니다. (시크릿에 있는 키: ${rawKeys.join(', ')}) ` +
+        `RDS 콘솔에서 해당 시크릿 "값 보기"로 JSON 키를 확인하거나, local.env에 PGHOST를 함께 두면 host를 보완할 수 있습니다.`,
+    );
+  }
+
   return { host, port, user, password, database, ssl };
 }
 
