@@ -32,6 +32,10 @@ app.use(
 );
 app.use(express.json());
 
+app.get('/health', (_req, res) => {
+  res.status(200).send('OK');
+});
+
 app.get(`${API_BASE_PATH}/todos`, async (_req, res) => {
   try {
     const todos = await store.list();
